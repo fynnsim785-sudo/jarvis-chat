@@ -7,6 +7,7 @@
   let code = localStorage.getItem('jc-code') || '';
   let state = { exists: false, pc_seen: null, snapshot: null, snapshot_at: null };
   let skew = 0; // Serverzeit - Handyzeit
+  let reg = { ok: null, err: '' }; // ist die Nummer beim Server angemeldet?
   let lastId = 0; const seen = new Set(); const waiters = new Map(); let history = []; let busy = false; let typingEl = null;
 
   // ---------- Server ----------
@@ -77,6 +78,9 @@
     else if (pcOnline()) { st.classList.add('on'); label.textContent = 'PC an'; }
     else { st.classList.add('off'); label.textContent = 'PC aus · ' + ago(now() - Date.parse(state.pc_seen)); }
     $('pair').hidden = !!state.pc_seen;
+    const srv = $('srv'); srv.className = 'hint small srv ' + (reg.ok ? 'ok' : reg.ok === false ? 'bad' : '');
+    srv.textContent = reg.ok ? 'Diese Nummer ist beim Server angemeldet. Du kannst sie jetzt Jarvis geben.' : reg.ok === false ? 'Diese Nummer ist NICHT beim Server angemeldet, Jarvis kennt sie deshalb nicht. Fehler: ' + reg.err : 'Melde Nummer beim Server an ...';
+    $('retry').hidden = reg.ok !== false;
     $('number').textContent = pretty(code); $('cmd').textContent = command(); $('sheet-number').textContent = pretty(code);
     const note = $('note');
     if (state.pc_seen && !pcOnline()) { note.hidden = false; note.textContent = 'Dein PC ist aus. Ich antworte aus der Cloud. PC-Werte sind vom letzten Mal, als er an war.'; } else note.hidden = true;
@@ -197,11 +201,15 @@
     };
     document.addEventListener('visibilitychange', () => { if (!document.hidden) { poll(); refreshState().catch(() => {}); } });
   }
+  async function register() {
+    try { await rpc('jc_create', { p_code: code }); await refreshState(); reg = { ok: !!state.exists, err: state.exists ? '' : 'Server hat die Nummer nicht gespeichert' }; }
+    catch (e) { reg = { ok: false, err: (e && e.message) || 'keine Verbindung' }; }
+    render();
+  }
   async function start() {
     if (!/^\d{12}$/.test(code)) { code = newCode(); localStorage.setItem('jc-code', code); }
-    bind(); render(); emptyHint();
-    try { await rpc('jc_create', { p_code: code }); await refreshState(); }
-    catch (e) { $('note').hidden = false; $('note').textContent = 'Keine Verbindung zum Server. Prüfe dein Internet. (' + e.message + ')'; }
+    bind(); $('retry').onclick = register; render(); emptyHint();
+    await register();
     await poll();
     setInterval(() => { if (!document.hidden) poll(); }, 3000);
     setInterval(() => { if (!document.hidden) refreshState().catch(() => {}); }, 8000);
