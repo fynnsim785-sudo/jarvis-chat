@@ -19,7 +19,8 @@
   <header>
     <div class="brand"><img src="icon-192.png" alt="" width="32" height="32"><b>Jarvis</b></div>
     <div id="status" class="pill"><i></i><span>Verbinde ...</span></div>
-    <button id="menu-btn" class="icon-btn" aria-label="Menü"><svg viewBox="0 0 24 24" width="22" height="22"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+    <button id="call-btn" class="icon-btn" aria-label="Jarvis anrufen"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"/></svg></button>
+    <button id="menu-btn" class="icon-btn" aria-label="Einstellungen"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M19.4 13a7.9 7.9 0 000-2l2-1.6a.5.5 0 00.1-.6l-1.9-3.3a.5.5 0 00-.6-.2l-2.4 1a7.7 7.7 0 00-1.7-1l-.4-2.5a.5.5 0 00-.5-.4h-3.8a.5.5 0 00-.5.4l-.4 2.5a7.7 7.7 0 00-1.7 1l-2.4-1a.5.5 0 00-.6.2L2.6 8.8a.5.5 0 00.1.6l2 1.6a7.9 7.9 0 000 2l-2 1.6a.5.5 0 00-.1.6l1.9 3.3c.1.2.4.3.6.2l2.4-1c.5.4 1.1.7 1.7 1l.4 2.5c0 .2.3.4.5.4h3.8c.3 0 .5-.2.5-.4l.4-2.5c.6-.3 1.2-.6 1.7-1l2.4 1c.2.1.5 0 .6-.2l1.9-3.3a.5.5 0 00-.1-.6zM12 15.5A3.5 3.5 0 1112 8.5a3.5 3.5 0 010 7z"/></svg></button>
   </header>
 
   <section id="pair" hidden>
@@ -40,27 +41,73 @@
 
   <main id="msgs" aria-live="polite"></main>
 
+  <div id="modebar" hidden>
+    <button id="mode-chat" class="mode on" type="button">Chat</button>
+    <button id="mode-ctl" class="mode" type="button">Steuern</button>
+    <span id="mode-hint">Befehle für den PC, sichtbar mit Live-Schritten</span>
+  </div>
   <form id="form" autocomplete="off">
+    <button id="mic" class="icon-btn mic" type="button" aria-label="Sprechen" hidden><svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 14a3 3 0 003-3V6a3 3 0 10-6 0v5a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.9V21h2v-3.1A7 7 0 0019 11z"/></svg></button>
     <textarea id="input" rows="1" maxlength="1000" placeholder="Nachricht an Jarvis" enterkeyhint="send"></textarea>
     <button id="send" type="submit" aria-label="Senden"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 12l16-8-6 16-2-7z" fill="currentColor"/></svg></button>
   </form>
 </div>
 
+<!-- Einstellungen -->
 <div id="sheet" hidden>
   <div class="sheet-card">
-    <div class="label">Deine Nummer</div>
-    <div id="sheet-number" class="number small">+1</div>
-    <div class="row">
-      <button id="sheet-copy" class="btn">Kopieren</button>
-      <button id="sheet-cmd" class="btn ghost">Befehl kopieren</button>
+    <div class="sheet-head"><b>Einstellungen</b><button id="sheet-close" class="icon-btn" aria-label="Schließen"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" fill="none"/></svg></button></div>
+
+    <div class="group">
+      <div class="label">Deine Nummer</div>
+      <div id="sheet-number" class="number small">+1</div>
+      <div class="row"><button id="sheet-copy" class="btn">Kopieren</button><button id="sheet-cmd" class="btn ghost">Befehl kopieren</button></div>
     </div>
+
+    <div class="group">
+      <div class="label">Stimme und Anruf</div>
+      <label class="opt"><input id="set-speak" type="checkbox"><span>Jarvis spricht seine Antworten vor</span></label>
+      <label class="sel"><span>Stimme</span>
+        <select id="set-voice"><option value="pc">Jarvis-Stimme vom PC (nur wenn der PC an ist)</option><option value="phone">Handy-Stimme (immer, schnell)</option></select></label>
+      <p class="hint small" id="voice-hint">Ist der PC aus, nimmt Jarvis automatisch die Handy-Stimme. Mit dem Telefon-Symbol oben sprichst du frei mit Jarvis (Anruf).</p>
+    </div>
+
+    <div class="group">
+      <div class="label">Benachrichtigungen (auch wenn die App zu ist)</div>
+      <div class="row"><button id="push-btn" class="btn" type="button">Benachrichtigungen einschalten</button></div>
+      <p id="push-msg" class="hint small"></p>
+      <label class="opt"><input id="set-push_disk" type="checkbox"><span>Wenn der Speicher fast voll ist</span></label>
+      <label class="opt"><input id="set-push_temp" type="checkbox"><span>Wenn der PC zu heiß oder der Arbeitsspeicher voll ist</span></label>
+      <label class="opt"><input id="set-push_remind" type="checkbox"><span>Bei Erinnerungen, Wecker und Timern</span></label>
+      <label class="opt"><input id="set-push_chat" type="checkbox"><span>Wenn Jarvis antwortet und die App zu ist</span></label>
+      <p class="hint small">Das ist eine Benachrichtigung, kein Telefonanruf. Ein echter Anruf braucht einen bezahlten Telefondienst.</p>
+    </div>
+
+    <div class="group">
+      <div class="label">PC-Steuerung</div>
+      <p id="ctl-status" class="hint small"></p>
+      <div id="ctl-pair" hidden>
+        <p class="hint small">1. Sag oder tippe bei Jarvis am PC: <b>Erlaube Fernsteuerung</b>.<br>2. Gib hier den 6-stelligen Code ein, der am PC erscheint.</p>
+        <div class="row"><input id="ctl-pin" inputmode="numeric" maxlength="7" placeholder="Code" autocomplete="off"><button id="ctl-pair-btn" class="btn" type="button">Koppeln</button></div>
+      </div>
+      <button id="ctl-off" class="btn danger" type="button" hidden>Steuerung beenden</button>
+      <p class="hint small">Befehle gehen nur, wenn der PC an ist. Gefährliches (löschen, herunterfahren, Programme schließen, Code ausführen) geht nie vom Handy aus.</p>
+    </div>
+
     <button id="sheet-new" class="btn danger">Neue Nummer (alter Chat wird gelöscht)</button>
-    <p class="hint small">Jarvis Chat kann nur schreiben. Er führt am PC nichts aus. Ist dein PC aus, antwortet er aus der Cloud und nennt dir beim PC nur den letzten bekannten Stand.</p>
-    <button id="sheet-close" class="btn ghost">Schließen</button>
   </div>
+</div>
+
+<!-- Anruf -->
+<div id="call" hidden>
+  <div class="call-top"><span id="call-state">Verbinde ...</span></div>
+  <canvas id="call-orb" width="560" height="560"></canvas>
+  <div id="call-text" class="call-text"></div>
+  <div class="call-actions"><button id="call-mute" class="round" type="button" aria-label="Stumm"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 14a3 3 0 003-3V6a3 3 0 10-6 0v5a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.9V21h2v-3.1A7 7 0 0019 11z"/></svg></button><button id="call-end" class="round end" type="button" aria-label="Auflegen">Auflegen</button></div>
 </div>
 
 <script src="config.js"></script>
 <script src="app.js"></script>
+<script src="extra.js"></script>
 </body>
 </html>

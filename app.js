@@ -8,6 +8,7 @@
   let state = { exists: false, pc_seen: null, snapshot: null, snapshot_at: null };
   let skew = 0; // Serverzeit - Handyzeit
   let reg = { ok: null, err: '' }; // ist die Nummer beim Server angemeldet?
+  let polled = false;
   let lastId = 0; const seen = new Set(); const waiters = new Map(); let history = []; let busy = false; let typingEl = null;
 
   // ---------- Server ----------
@@ -50,16 +51,20 @@
   const pcOnline = () => !!state.pc_seen && now() - Date.parse(state.pc_seen) < 75000;
 
   // ---------- Anzeige ----------
+  const hooks = { msg: [], render: [] }; // extra.js (Stimme, Steuerung, Benachrichtigungen) hängt sich hier ein
   function addMsg(m) {
     if (m.id != null) { if (seen.has(m.id)) return; seen.add(m.id); if (m.id > lastId) lastId = m.id; }
     const e = msgsEl.querySelector('.empty'); if (e) e.remove();
-    const div = document.createElement('div'); div.className = 'msg ' + m.role; div.textContent = m.body;
-    const s = document.createElement('small'); s.textContent = (m.role === 'jarvis' ? (m.via === 'pc' ? 'vom PC' : m.via === 'cloud' ? 'Cloud' : '') + (m.via === 'pc' || m.via === 'cloud' ? ' · ' : '') : '') + clock(m.created_at || new Date(now()).toISOString());
+    const live = m.via === 'live', alert = m.via === 'alert', ctl = m.kind === 'ctl';
+    const div = document.createElement('div'); div.className = 'msg ' + m.role + (live ? ' live' : '') + (alert ? ' alert' : '') + (ctl ? ' ctl' : ''); div.textContent = (ctl ? 'Steuern: ' : '') + m.body;
+    const tag = m.role === 'jarvis' ? (live ? 'Live vom PC' : alert ? 'Warnung' : m.via === 'pc' ? 'vom PC' : m.via === 'cloud' ? 'Cloud' : '') : (ctl ? 'Befehl' : '');
+    const s = document.createElement('small'); s.textContent = (tag ? tag + ' · ' : '') + clock(m.created_at || new Date(now()).toISOString());
     div.appendChild(s);
     if (typingEl) msgsEl.insertBefore(div, typingEl); else msgsEl.appendChild(div);
     msgsEl.scrollTop = msgsEl.scrollHeight;
-    history.push({ role: m.role === 'jarvis' ? 'assistant' : 'user', content: m.body }); history = history.slice(-10);
+    if (!live && !alert) { history.push({ role: m.role === 'jarvis' ? 'assistant' : 'user', content: m.body }); history = history.slice(-10); }
     if (m.reply_to != null && waiters.has(m.reply_to)) { const w = waiters.get(m.reply_to); waiters.delete(m.reply_to); w(m); }
+    if (!m.old) for (const f of hooks.msg) { try { f(m); } catch { /* ignore */ } }
   }
   function typing(on) {
     if (on && !typingEl) { typingEl = document.createElement('div'); typingEl.className = 'msg jarvis typing'; typingEl.innerHTML = '<span class="dots"><span></span><span></span><span></span></span>'; msgsEl.appendChild(typingEl); msgsEl.scrollTop = msgsEl.scrollHeight; }
@@ -84,6 +89,7 @@
     $('number').textContent = pretty(code); $('cmd').textContent = command(); $('sheet-number').textContent = pretty(code);
     const note = $('note');
     if (state.pc_seen && !pcOnline()) { note.hidden = false; note.textContent = 'Dein PC ist aus. Ich antworte aus der Cloud. PC-Werte sind vom letzten Mal, als er an war.'; } else note.hidden = true;
+    for (const f of hooks.render) { try { f(); } catch { /* ignore */ } }
   }
 
   // ---------- Fragen zum PC (ohne KI, aus dem letzten Stand) ----------
@@ -178,15 +184,16 @@
 
   async function poll() {
     try {
+      const first = lastId === 0 && !polled; polled = true; // der erste Abruf lädt nur den Verlauf (wird nicht vorgelesen)
       const list = await rpc('jc_list', { p_code: code, p_after: lastId });
-      for (const m of (list || [])) { if (m.role === 'user' && seen.has(Number(m.id))) continue; addMsg({ id: Number(m.id), role: m.role, via: m.via, body: m.body, reply_to: m.reply_to == null ? null : Number(m.reply_to), created_at: m.created_at }); }
+      for (const m of (list || [])) { if (m.role === 'user' && seen.has(Number(m.id))) continue; addMsg({ id: Number(m.id), role: m.role, via: m.via, kind: m.kind || 'chat', body: m.body, reply_to: m.reply_to == null ? null : Number(m.reply_to), created_at: m.created_at, old: first }); }
       if (!msgsEl.children.length) emptyHint();
     } catch { /* offline, naechster Versuch */ }
   }
 
   // ---------- Start ----------
   function bind() {
-    formEl.addEventListener('submit', (e) => { e.preventDefault(); const t = inputEl.value.trim(); if (!t) return; inputEl.value = ''; inputEl.style.height = 'auto'; send(t); });
+    formEl.addEventListener('submit', (e) => { e.preventDefault(); const t = inputEl.value.trim(); if (!t) return; inputEl.value = ''; inputEl.style.height = 'auto'; if (window.JC.interceptSend && window.JC.interceptSend(t)) return; send(t); });
     inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && window.matchMedia('(min-width:700px)').matches) { e.preventDefault(); formEl.requestSubmit(); } });
     inputEl.addEventListener('input', () => { inputEl.style.height = 'auto'; inputEl.style.height = Math.min(120, inputEl.scrollHeight) + 'px'; });
     $('copy-number').onclick = (e) => copy(pretty(code), e.target); $('copy-cmd').onclick = (e) => copy(command(), e.target);
@@ -216,6 +223,12 @@
     setInterval(render, 30000);
     if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
   }
-  window.JC = { localAnswer, pretty, get state() { return state; }, set state(v) { state = v; }, send, start, ago, get code() { return code; } };
+  window.JC = {
+    localAnswer, pretty, get state() { return state; }, set state(v) { state = v; }, send, start, ago, get code() { return code; },
+    // für extra.js
+    rpc, addMsg, hooks, pcOnline, now, copy, refreshState, render, typing, $, get busy() { return busy; }, interceptSend: null,
+    waitFor(id, fn) { waiters.set(id, fn); },
+    reset(newCode) { code = newCode; localStorage.setItem('jc-code', code); },
+  };
   start();
 })();
