@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050d14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Jarvis">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Jarvis Chat</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand"><img src="icon-192.png" alt="" width="32" height="32"><b>Jarvis</b></div>
+    <div id="status" class="pill"><i></i><span>Verbinde ...</span></div>
+    <button id="menu-btn" class="icon-btn" aria-label="Menü"><svg viewBox="0 0 24 24" width="22" height="22"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+  </header>
+
+  <section id="pair" hidden>
+    <div class="label">Deine Nummer</div>
+    <div id="number" class="number">+1 000 000 000 000</div>
+    <p class="hint">Sag oder tippe das bei Jarvis am PC:</p>
+    <div id="cmd" class="cmd">Verbinde Handy-Chat mit +1 000 000 000 000</div>
+    <div class="row">
+      <button id="copy-number" class="btn">Nummer kopieren</button>
+      <button id="copy-cmd" class="btn ghost">Befehl kopieren</button>
+    </div>
+    <p class="hint small">Das ist keine echte Telefonnummer, nur dein Schlüssel. Wer sie kennt, kann mit Jarvis chatten. Gib sie niemandem.</p>
+  </section>
+
+  <div id="note" class="note" hidden></div>
+
+  <main id="msgs" aria-live="polite"></main>
+
+  <form id="form" autocomplete="off">
+    <textarea id="input" rows="1" maxlength="1000" placeholder="Nachricht an Jarvis" enterkeyhint="send"></textarea>
+    <button id="send" type="submit" aria-label="Senden"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 12l16-8-6 16-2-7z" fill="currentColor"/></svg></button>
+  </form>
+</div>
+
+<div id="sheet" hidden>
+  <div class="sheet-card">
+    <div class="label">Deine Nummer</div>
+    <div id="sheet-number" class="number small">+1</div>
+    <div class="row">
+      <button id="sheet-copy" class="btn">Kopieren</button>
+      <button id="sheet-cmd" class="btn ghost">Befehl kopieren</button>
+    </div>
+    <button id="sheet-new" class="btn danger">Neue Nummer (alter Chat wird gelöscht)</button>
+    <p class="hint small">Jarvis Chat kann nur schreiben. Er führt am PC nichts aus. Ist dein PC aus, antwortet er aus der Cloud und nennt dir beim PC nur den letzten bekannten Stand.</p>
+    <button id="sheet-close" class="btn ghost">Schließen</button>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
