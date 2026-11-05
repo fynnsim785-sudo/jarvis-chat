@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<canvas id="bg" aria-hidden="true"></canvas>
 <div id="app">
   <header>
     <div class="brand"><img src="icon-192.png" alt="" width="32" height="32"><b>Jarvis</b></div>
@@ -94,6 +95,18 @@
       <p class="hint small">Befehle gehen nur, wenn der PC an ist. Gefährliches (löschen, herunterfahren, Programme schließen, Code ausführen) geht nie vom Handy aus.</p>
     </div>
 
+    <div class="group">
+      <div class="label">Gespräche (Anrufe)</div>
+      <p class="hint small">Jeder Anruf wird mit allem, was gesagt wurde, gespeichert: hier auf dem Handy und auf deinem PC (Dokumente, Jarvis, Handy-Chat).</p>
+      <div id="calls-list" class="calls"></div>
+    </div>
+
+    <div class="group">
+      <div class="label">Gedächtnis</div>
+      <p class="hint small">Sag in einem Chat oder Anruf: <b>Merk dir, dass ...</b> Jarvis nutzt das für immer, am PC und am Handy.</p>
+      <div id="mem-list" class="calls"></div>
+    </div>
+
     <button id="sheet-new" class="btn danger">Neue Nummer (alter Chat wird gelöscht)</button>
   </div>
 </div>
@@ -104,6 +117,14 @@
   <canvas id="call-orb" width="560" height="560"></canvas>
   <div id="call-text" class="call-text"></div>
   <div class="call-actions"><button id="call-mute" class="round" type="button" aria-label="Stumm"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 14a3 3 0 003-3V6a3 3 0 10-6 0v5a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.9V21h2v-3.1A7 7 0 0019 11z"/></svg></button><button id="call-end" class="round end" type="button" aria-label="Auflegen">Auflegen</button></div>
+</div>
+
+<!-- Eingehender Anruf von Jarvis (kommt über die Benachrichtigung) -->
+<div id="incoming" hidden>
+  <div class="inc-ring"><img src="icon-192.png" alt="" width="96" height="96"></div>
+  <div class="inc-title">Jarvis ruft an</div>
+  <div id="inc-text" class="inc-text"></div>
+  <div class="call-actions"><button id="inc-no" class="round off" type="button">Später</button><button id="inc-yes" class="round yes" type="button">Annehmen</button></div>
 </div>
 
 <script src="config.js"></script>

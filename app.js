@@ -52,14 +52,23 @@
 
   // ---------- Anzeige ----------
   const hooks = { msg: [], render: [] }; // extra.js (Stimme, Steuerung, Benachrichtigungen) hängt sich hier ein
+  // Text mit anklickbaren Links (nur http/https)
+  function fill(el, text) {
+    const parts = String(text).split(/(https?:\/\/[^\s<>"]+)/g);
+    for (const p of parts) {
+      if (/^https?:\/\//.test(p)) { const a = document.createElement('a'); a.href = p; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = p.length > 48 ? p.slice(0, 45) + '…' : p; el.appendChild(a); }
+      else if (p) el.appendChild(document.createTextNode(p));
+    }
+  }
   function addMsg(m) {
     if (m.id != null) { if (seen.has(m.id)) return; seen.add(m.id); if (m.id > lastId) lastId = m.id; }
     const e = msgsEl.querySelector('.empty'); if (e) e.remove();
     const live = m.via === 'live', alert = m.via === 'alert', ctl = m.kind === 'ctl';
-    const div = document.createElement('div'); div.className = 'msg ' + m.role + (live ? ' live' : '') + (alert ? ' alert' : '') + (ctl ? ' ctl' : ''); div.textContent = (ctl ? 'Steuern: ' : '') + m.body;
-    const tag = m.role === 'jarvis' ? (live ? 'Live vom PC' : alert ? 'Warnung' : m.via === 'pc' ? 'vom PC' : m.via === 'cloud' ? 'Cloud' : '') : (ctl ? 'Befehl' : '');
-    const s = document.createElement('small'); s.textContent = (tag ? tag + ' · ' : '') + clock(m.created_at || new Date(now()).toISOString());
-    div.appendChild(s);
+    const marker = /^\[Anruf\]/.test(m.body || '');
+    const div = document.createElement('div'); div.className = 'msg ' + m.role + (marker ? ' marker' : live ? ' live' : '') + (alert ? ' alert' : '') + (ctl ? ' ctl' : '');
+    fill(div, (ctl ? 'Steuern: ' : '') + (marker ? m.body.replace(/^\[Anruf\]\s*/, 'Anruf ') : m.body));
+    const tag = m.role === 'jarvis' ? (live ? 'Live vom PC' : alert ? 'Meldung vom PC' : m.via === 'pc' ? 'vom PC' : m.via === 'cloud' ? 'Cloud' : '') : (ctl ? 'Befehl' : '');
+    if (!marker) { const s = document.createElement('small'); s.textContent = (tag ? tag + ' · ' : '') + clock(m.created_at || new Date(now()).toISOString()); div.appendChild(s); }
     if (typingEl) msgsEl.insertBefore(div, typingEl); else msgsEl.appendChild(div);
     msgsEl.scrollTop = msgsEl.scrollHeight;
     if (!live && !alert) { history.push({ role: m.role === 'jarvis' ? 'assistant' : 'user', content: m.body }); history = history.slice(-10); }
@@ -102,6 +111,13 @@
   }
   function localAnswer(text) {
     const t = norm(text); const s = state.snapshot;
+    // Gedächtnis: am Handy merken, wenn der PC aus ist (der PC übernimmt es beim nächsten Start); sonst antwortet der PC
+    const mem = String(text).match(/^\s*(?:bitte\s+)?(?:merk(?:e)? dir|vergiss nicht|denk daran|das ist wichtig)\s*[:,]?\s*(?:dass|das)?\s*(.{4,})$/i);
+    if (mem && !pcOnline()) { const l = JSON.parse(localStorage.getItem('jc-mem') || '[]'); l.push({ t: mem[1].trim().slice(0, 220), at: Date.now() }); localStorage.setItem('jc-mem', JSON.stringify(l.slice(-40))); return 'Gemerkt, Master: ' + mem[1].trim().replace(/[.!?]*$/, '') + '. Dein PC ist aus, er übernimmt es beim nächsten Start.'; }
+    if (/^(was|wie viel) (weisst|weiss|hast|kennst) du (alles )?(ueber mich|von mir|dir gemerkt|gemerkt)|^was hast du dir (alles )?(ueber mich )?gemerkt/.test(t)) {
+      const all = [...((s && s.memory) || []), ...JSON.parse(localStorage.getItem('jc-mem') || '[]').map((x) => x.t)];
+      return all.length ? 'Ich habe mir gemerkt: ' + all.slice(0, 6).map((x) => String(x).replace(/[.!?]+$/, '')).join('. ') + '.' : 'Bisher habe ich mir noch nichts gemerkt. Sag zum Beispiel: Merk dir, dass ich in Dortmund wohne.';
+    }
     const about = /\b(pc|rechner|computer|laptop|festplatte|platte|ssd|laufwerk|ram|arbeitsspeicher|grafikkarte|gpu|cpu|prozessor|speicher|gb)\b/.test(t);
     const noData = () => state.pc_seen ? null : 'Dein PC hat sich noch nie bei mir gemeldet, deshalb kenne ich seine Werte noch nicht. Verbinde ihn zuerst mit der Nummer oben.';
     if (/\b(ram|arbeitsspeicher)\b/.test(t)) {
@@ -133,9 +149,14 @@
   }
 
   // ---------- Cloud-Antwort (wenn der PC aus ist) ----------
+  function memText() {
+    let local = []; try { local = JSON.parse(localStorage.getItem('jc-mem') || '[]').map((x) => x.t); } catch { /* ignore */ }
+    const all = [...((state.snapshot && state.snapshot.memory) || []), ...local];
+    return all.length ? ' Das weißt du über den Nutzer: ' + all.slice(0, 20).join('; ') + '.' : '';
+  }
   function snapText() {
-    const s = state.snapshot; if (!s) return 'Vom PC sind keine Werte bekannt.';
-    return 'Letzter bekannter PC-Stand (' + dayTime(state.snapshot_at) + '): ' + s.disks.map((d) => 'Laufwerk ' + d.d + ' ' + gb(d.free) + ' frei von ' + gb(d.total)).join('; ') + '; Arbeitsspeicher ' + gb(s.ram.free) + ' frei von ' + gb(s.ram.total) + '; Prozessor ' + s.cpu + ' Prozent' + (s.gpu ? '; Grafikkarte ' + s.gpu.name + ' ' + s.gpu.temp + ' Grad' : '') + '.';
+    const s = state.snapshot; if (!s) return 'Vom PC sind keine Werte bekannt.' + memText();
+    return 'Letzter bekannter PC-Stand (' + dayTime(state.snapshot_at) + '): ' + s.disks.map((d) => 'Laufwerk ' + d.d + ' ' + gb(d.free) + ' frei von ' + gb(d.total)).join('; ') + '; Arbeitsspeicher ' + gb(s.ram.free) + ' frei von ' + gb(s.ram.total) + '; Prozessor ' + s.cpu + ' Prozent' + (s.gpu ? '; Grafikkarte ' + s.gpu.name + ' ' + s.gpu.temp + ' Grad' : '') + '.' + memText();
   }
   async function cloud() {
     const sys = 'Du bist Jarvis, der persönliche KI-Assistent des Nutzers, hier im Handy-Chat. Du sprichst Deutsch, duzt den Nutzer, bist höflich und präzise mit leicht trockenem Humor und antwortest kurz in 1 bis 4 Sätzen, ohne Markdown und ohne Emojis. WICHTIG: Im Handy-Chat kannst du nur schreiben. Du kannst nichts auf dem PC ausführen, öffnen, starten, löschen oder verändern, auch wenn der Nutzer darum bittet. Sag dann freundlich, dass das nur direkt am PC geht. ' +

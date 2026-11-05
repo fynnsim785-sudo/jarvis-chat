@@ -143,6 +143,15 @@
     octx.fillStyle = g; octx.beginPath(); octx.arc(c, c, 105 + level * 30, 0, Math.PI * 2); octx.fill();
     raf = requestAnimationFrame(drawOrb);
   }
+  // jeder Anruf wird gespeichert: hier auf dem Handy (Einstellungen > Gespräche) und, über die Markierungen im Chat, auf dem PC
+  let callLog = null;
+  const lastJarvis = () => { const l = [...document.querySelectorAll('.msg.jarvis:not(.live):not(.alert):not(.marker)')].pop(); return l ? l.firstChild.textContent : ''; };
+  const mark = (txt) => { try { JC.rpc('jc_post', { p_code: JC.code, p_role: 'jarvis', p_via: 'live', p_body: '[Anruf] ' + txt, p_reply_to: null }); } catch { /* ignore */ } };
+  function saveCall() {
+    if (!callLog) return; callLog.end = Date.now();
+    if (callLog.lines.length) { let all = []; try { all = JSON.parse(localStorage.getItem('jc-calls') || '[]'); } catch { /* ignore */ } all.unshift(callLog); try { localStorage.setItem('jc-calls', JSON.stringify(all.slice(0, 30))); } catch { /* ignore */ } }
+    const sec = Math.round((callLog.end - callLog.start) / 1000); mark(`beendet (${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}, ${callLog.lines.filter((x) => x.r === 'du').length} Sätze von dir)`); callLog = null;
+  }
   async function callLoop() {
     while (callOn) {
       if (muted) { setCall('muted'); await sleep(300); continue; }
@@ -150,21 +159,72 @@
       const text = await listenOnce(14000);
       if (!callOn) break; if (muted || !text) continue;
       setCall('think', 'Du: ' + text);
+      if (callLog) callLog.lines.push({ r: 'du', t: text, at: Date.now() });
       await JC.send(text);                              // wartet, bis die Antwort da ist (PC, Cloud oder Handy-Wissen)
-      setCall('speak'); await speakChain.catch(() => {}); // Antwort wird vorgelesen
+      setCall('speak'); const said = lastJarvis(); if (callLog && said) callLog.lines.push({ r: 'jarvis', t: said, at: Date.now() });
+      $('call-text').textContent = said; await speakChain.catch(() => {}); // Antwort wird vorgelesen
       await sleep(250);
-      const last = [...document.querySelectorAll('.msg.jarvis:not(.live):not(.alert)')].pop(); if (last) $('call-text').textContent = last.firstChild.textContent;
     }
   }
-  function startCall() {
+  function startCall(brief) {
     if (callOn) return;
     if (!SR) { alert('Dieser Browser kann keine Sprache erkennen. Auf dem iPhone geht es in Safari. Aus der App auf dem Home-Bildschirm geht es manchmal nicht, dann nimm die Diktier-Taste der Tastatur.'); return; }
     unlockAudio(); callOn = true; muted = false; callEl.hidden = false; setCall('idle', ''); raf = requestAnimationFrame(drawOrb);
-    $('sheet').hidden = true;
-    enqueueSpeak('Ich höre.'); callLoop();
+    $('sheet').hidden = true; callLog = { start: Date.now(), lines: [] }; mark('gestartet');
+    if (brief) { callLog.lines.push({ r: 'jarvis', t: brief, at: Date.now() }); $('call-text').textContent = brief; enqueueSpeak(brief).then(() => { if (callOn) enqueueSpeak('Was soll ich als Nächstes tun?'); }); }
+    else enqueueSpeak('Ich höre.');
+    callLoop();
   }
-  function endCall() { callOn = false; cancelAnimationFrame(raf); callEl.hidden = true; try { listenOnce.cur && listenOnce.cur.stop(); } catch { /* ignore */ } stopSpeaking(); }
-  $('call-btn').addEventListener('click', startCall);
+  function endCall() { callOn = false; cancelAnimationFrame(raf); callEl.hidden = true; try { listenOnce.cur && listenOnce.cur.stop(); } catch { /* ignore */ } stopSpeaking(); saveCall(); renderCalls(); }
+  // Gespräche und Gedächtnis in den Einstellungen
+  function renderCalls() {
+    const box = $('calls-list'); if (!box) return; let all = []; try { all = JSON.parse(localStorage.getItem('jc-calls') || '[]'); } catch { /* ignore */ }
+    box.textContent = '';
+    if (!all.length) { const p = document.createElement('p'); p.className = 'hint small'; p.textContent = 'Noch kein Anruf.'; box.appendChild(p); return; }
+    for (const c of all.slice(0, 12)) {
+      const d = document.createElement('details'); const s = document.createElement('summary'); const sec = Math.max(1, Math.round(((c.end || c.start) - c.start) / 1000));
+      s.textContent = new Date(c.start).toLocaleString('de-DE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' · ' + Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0') + ' · ' + c.lines.length + ' Zeilen'; d.appendChild(s);
+      for (const l of c.lines) { const p = document.createElement('p'); p.className = 'cl ' + l.r; p.textContent = (l.r === 'du' ? 'Du: ' : 'Jarvis: ') + l.t; d.appendChild(p); }
+      box.appendChild(d);
+    }
+  }
+  function renderMem() {
+    const box = $('mem-list'); if (!box) return; let local = []; try { local = JSON.parse(localStorage.getItem('jc-mem') || '[]').map((x) => x.t); } catch { /* ignore */ }
+    const all = [...((JC.state.snapshot && JC.state.snapshot.memory) || []), ...local]; box.textContent = '';
+    if (!all.length) { const p = document.createElement('p'); p.className = 'hint small'; p.textContent = 'Noch nichts gemerkt.'; box.appendChild(p); return; }
+    for (const t of all.slice(0, 20)) { const p = document.createElement('p'); p.className = 'cl'; p.textContent = '★ ' + t; box.appendChild(p); }
+  }
+  JC.hooks.render.push(() => { renderMem(); });
+  renderCalls();
+
+  // Eingehender Anruf (aus der Benachrichtigung): Annehmen -> Jarvis sagt, was los ist, danach kann man reden
+  async function incoming() {
+    await sleep(1800); await JC.refreshState().catch(() => {});
+    const alerts = [...document.querySelectorAll('.msg.alert')].slice(-3).map((e) => e.firstChild.textContent.replace(/^Meldung\s*/, ''));
+    const brief = alerts.length ? 'Master, es gibt Neuigkeiten. ' + alerts.join(' ') : 'Master, ich wollte nur kurz melden, dass alles in Ordnung ist.';
+    $('inc-text').textContent = alerts.length ? alerts.join('\n\n') : 'Nichts Dringendes.'; $('incoming').hidden = false;
+    $('inc-yes').onclick = () => { $('incoming').hidden = true; history.replaceState(null, '', location.pathname); startCall(brief); };
+    $('inc-no').onclick = () => { $('incoming').hidden = true; history.replaceState(null, '', location.pathname); };
+  }
+  if (/[?&]call=1\b/.test(location.search)) incoming();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.call && !callOn) incoming(); });
+
+  // Hintergrund: ruhig treibende Lichtpunkte mit feinen Linien (stoppt bei "weniger Bewegung" und im Hintergrund)
+  (function bg() {
+    const cv = $('bg'); if (!cv || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const g = cv.getContext('2d'); let W = 0; let H = 0; let pts = []; let raf = 0;
+    function size() { const d = Math.min(2, devicePixelRatio || 1); W = cv.width = innerWidth * d; H = cv.height = innerHeight * d; pts = Array.from({ length: Math.round(Math.min(46, innerWidth * innerHeight / 14000)) }, () => ({ x: Math.random() * W, y: Math.random() * H, vx: (Math.random() - 0.5) * 0.25 * d, vy: (Math.random() - 0.5) * 0.25 * d, r: (0.8 + Math.random() * 1.6) * d })); }
+    function frame() {
+      raf = requestAnimationFrame(frame); if (document.hidden) return;
+      g.clearRect(0, 0, W, H);
+      for (const p of pts) { p.x += p.vx; p.y += p.vy; if (p.x < 0 || p.x > W) p.vx *= -1; if (p.y < 0 || p.y > H) p.vy *= -1; }
+      const lim = Math.min(W, H) * 0.2;
+      for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) { const dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y, d = Math.hypot(dx, dy); if (d < lim) { g.strokeStyle = `rgba(76,201,255,${0.1 * (1 - d / lim)})`; g.lineWidth = 1; g.beginPath(); g.moveTo(pts[i].x, pts[i].y); g.lineTo(pts[j].x, pts[j].y); g.stroke(); } }
+      for (const p of pts) { g.fillStyle = 'rgba(120,215,255,0.45)'; g.beginPath(); g.arc(p.x, p.y, p.r, 0, 6.283); g.fill(); }
+    }
+    addEventListener('resize', size); size(); frame();
+  })();
+  $('call-btn').addEventListener('click', () => startCall());
   $('call-end').addEventListener('click', endCall);
   $('call-mute').addEventListener('click', () => { muted = !muted; $('call-mute').classList.toggle('off', muted); if (muted) { try { listenOnce.cur && listenOnce.cur.stop(); } catch { /* ignore */ } } });
 
