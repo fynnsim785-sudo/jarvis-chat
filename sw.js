@@ -1,6 +1,6 @@
 // Jarvis Chat: Netz zuerst, damit neue Versionen sofort ankommen; ohne Netz kommt die letzte Kopie aus dem Cache.
 // Außerdem: Benachrichtigungen (Push) vom PC anzeigen, auch wenn die Seite zu ist.
-const CACHE = 'jarvis-chat-v2';
+const CACHE = 'jarvis-chat-v3';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'extra.js', 'config.js', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
@@ -12,7 +12,7 @@ self.addEventListener('fetch', (e) => {
 
 self.addEventListener('push', (e) => {
   let d = {}; try { d = e.data ? e.data.json() : {}; } catch { d = { title: 'Jarvis', body: e.data ? e.data.text() : '' }; }
-  e.waitUntil(self.registration.showNotification(d.title || 'Jarvis', { body: d.body || '', icon: 'icon-192.png', badge: 'icon-192.png', tag: 'jarvis', renotify: true, data: { url: d.url || './' } }));
+  e.waitUntil(self.registration.showNotification(d.title || 'Jarvis', { body: d.body || '', icon: 'icon-192.png', badge: 'icon-192.png', tag: d.call ? 'jarvis-call' : 'jarvis', renotify: true, requireInteraction: !!d.call, vibrate: d.call ? [700, 500, 700, 500, 700] : undefined, data: { url: d.url || './' } }));
 });
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();

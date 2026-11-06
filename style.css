@@ -163,3 +163,50 @@ header::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;ba
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 
 #inc-no{width:auto;min-width:110px;border-radius:999px;padding:0 20px;color:var(--text)}
+
+/* ===== Anruf im iPhone-Stil (Chat 4) ===== */
+.ios{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Roboto,sans-serif;color:#fff}
+.ios-bg{position:absolute;inset:0;z-index:-1;background:
+  radial-gradient(60% 45% at 20% 75%,rgba(120,110,40,.55),transparent 70%),
+  radial-gradient(55% 40% at 85% 85%,rgba(150,70,30,.45),transparent 70%),
+  radial-gradient(70% 50% at 70% 20%,rgba(40,70,90,.55),transparent 70%),
+  linear-gradient(180deg,#1b2228,#11161a 55%,#141310);filter:blur(18px) saturate(1.1);transform:scale(1.15)}
+.ios::after{content:"";position:absolute;inset:0;z-index:-1;background:rgba(0,0,0,.28)}
+#call.ios,#incoming.ios{background:#111;isolation:isolate;overflow:hidden}
+#call.ios{justify-content:flex-start;gap:0;padding:calc(54px + env(safe-area-inset-top)) 22px calc(40px + env(safe-area-inset-bottom))}
+.ios-head{text-align:center}
+.ios-name{font-size:34px;font-weight:400;letter-spacing:.2px}
+.ios-sub{margin-top:6px;font-size:17px;color:rgba(235,235,245,.62);letter-spacing:0;text-transform:none}
+#call-orb{width:150px;height:150px;margin:22px 0 6px}
+.ios-caption{min-height:66px;max-width:330px;text-align:center;font-size:16px;line-height:1.4;color:rgba(255,255,255,.88);overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical}
+.ios-caption.off{visibility:hidden}
+.ios-grid{display:grid;grid-template-columns:repeat(3,78px);gap:22px 30px;margin-top:auto;margin-bottom:46px}
+.ios-key{background:none;border:0;color:#fff;display:flex;flex-direction:column;align-items:center;gap:7px;padding:0;cursor:pointer;font:inherit}
+.ios-key .k{width:76px;height:76px;border-radius:50%;background:rgba(255,255,255,.17);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);display:grid;place-items:center;transition:background .15s,color .15s}
+.ios-key svg{width:32px;height:32px;fill:currentColor}
+.ios-key .slash{display:none}
+.ios-key em{font-style:normal;font-size:13px;color:#fff}
+.ios-key.on .k{background:#fff;color:#111}
+#call-mute.on .slash{display:inline}
+.ios-key:active .k{background:rgba(255,255,255,.35)}
+.ios-end{width:76px;height:76px;border-radius:50%;border:0;background:#ff3b30;display:grid;place-items:center;cursor:pointer}
+.ios-end svg{width:38px;height:38px;fill:#fff}
+#cam-view{position:absolute;top:calc(14px + env(safe-area-inset-top));right:14px;width:104px;height:150px;object-fit:cover;border-radius:16px;z-index:2;box-shadow:0 6px 24px rgba(0,0,0,.5);background:#000}
+#cam-view[hidden]{display:none}
+#incoming.ios{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:0;padding:calc(64px + env(safe-area-inset-top)) 28px calc(46px + env(safe-area-inset-bottom));text-align:left}
+#incoming[hidden]{display:none}
+.inc-head{margin-top:10px}
+.inc-name{font-size:30px;font-weight:400;letter-spacing:.3px}
+.inc-app{display:flex;align-items:center;gap:7px;margin-top:8px;font-size:16px;color:rgba(235,235,245,.7)}
+.inc-app img{border-radius:5px}
+#incoming .inc-text{margin-top:22px;color:rgba(235,235,245,.62);font-size:15px;max-width:100%;text-align:left;max-height:30vh}
+.inc-mid{margin-top:auto;margin-bottom:34px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding-left:22px;font-size:13px}
+.inc-mid svg{fill:#fff}
+.inc-btns{display:flex;justify-content:space-between;padding:0 6px}
+.inc-btns>div{display:flex;flex-direction:column;align-items:center;gap:9px;font-size:14px}
+.inc-b{width:78px;height:78px;border-radius:50%;border:0;display:grid;place-items:center;cursor:pointer}
+.inc-b svg{width:34px;height:34px}
+.inc-b.no{background:#ff3b30}
+.inc-b.yes{background:#2f80ff;animation:none}
+#incoming:not([hidden]) .inc-b.yes{animation:incPulse 1.6s ease-in-out infinite}
+@keyframes incPulse{0%,100%{box-shadow:0 0 0 0 rgba(47,128,255,.5)}50%{box-shadow:0 0 0 14px rgba(47,128,255,0)}}

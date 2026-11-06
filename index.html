@@ -111,20 +111,40 @@
   </div>
 </div>
 
-<!-- Anruf -->
-<div id="call" hidden>
-  <div class="call-top"><span id="call-state">Verbinde ...</span></div>
-  <canvas id="call-orb" width="560" height="560"></canvas>
-  <div id="call-text" class="call-text"></div>
-  <div class="call-actions"><button id="call-mute" class="round" type="button" aria-label="Stumm"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 14a3 3 0 003-3V6a3 3 0 10-6 0v5a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.9V21h2v-3.1A7 7 0 0019 11z"/></svg></button><button id="call-end" class="round end" type="button" aria-label="Auflegen">Auflegen</button></div>
+<!-- Anruf (sieht aus wie ein normaler Telefonanruf) -->
+<div id="call" class="ios" hidden>
+  <div class="ios-bg"></div>
+  <video id="cam-view" playsinline muted autoplay hidden></video>
+  <div class="ios-head">
+    <div class="ios-name">Jarvis</div>
+    <div id="call-state" class="ios-sub">Verbinde …</div>
+  </div>
+  <canvas id="call-orb" width="300" height="300"></canvas>
+  <div id="call-text" class="ios-caption"></div>
+  <div class="ios-grid">
+    <button id="call-mute" class="ios-key" type="button"><span class="k"><svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 003-3V6a3 3 0 10-6 0v5a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.9V21h2v-3.1A7 7 0 0019 11z"/><path d="M4 4l16 16" stroke="currentColor" stroke-width="2" class="slash"/></svg></span><em>stumm</em></button>
+    <button id="call-cam" class="ios-key" type="button"><span class="k"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h9a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2zm14 3l4-3v10l-4-3z"/></svg></span><em>Kamera</em></button>
+    <button id="call-pc" class="ios-key" type="button"><span class="k"><svg viewBox="0 0 24 24"><path d="M3 4h18v12H3zm2 2v8h14V6zM8 18h8v2H8z"/></svg></span><em>PC steuern</em></button>
+    <button id="call-sub" class="ios-key on" type="button"><span class="k"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zm3 5h5v2H6zm7 0h5v2h-5zm-7 4h9v2H6zm11 0h1v2h-1z"/></svg></span><em>Untertitel</em></button>
+    <button id="call-flip" class="ios-key" type="button"><span class="k"><svg viewBox="0 0 24 24"><path d="M9 4L7 6H4v13h16V6h-3l-2-2zm3 4a5 5 0 014.9 4H19l-3 3-3-3h2a3 3 0 00-5.6-1.5L8 9.3A5 5 0 0112 8zm-4 5l3 3H9a3 3 0 005.6 1.5l1.4 1.2A5 5 0 017.1 16H5z"/></svg></span><em>drehen</em></button>
+    <button id="call-hold" class="ios-key" type="button"><span class="k"><svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg></span><em>halten</em></button>
+  </div>
+  <button id="call-end" class="ios-end" type="button" aria-label="Auflegen"><svg viewBox="0 0 24 24"><path d="M12 9c-3.3 0-6.4.9-9 2.6-.5.3-.6.9-.3 1.4l1.7 2.5c.3.4.8.6 1.3.4l3-1.2c.4-.2.7-.6.6-1.1l-.2-2a13 13 0 015.8 0l-.2 2c0 .5.2.9.6 1.1l3 1.2c.5.2 1 0 1.3-.4l1.7-2.5c.3-.5.2-1.1-.3-1.4A16.4 16.4 0 0012 9z"/></svg></button>
 </div>
 
-<!-- Eingehender Anruf von Jarvis (kommt über die Benachrichtigung) -->
-<div id="incoming" hidden>
-  <div class="inc-ring"><img src="icon-192.png" alt="" width="96" height="96"></div>
-  <div class="inc-title">Jarvis ruft an</div>
+<!-- Eingehender Anruf von Jarvis (sieht aus wie ein Anruf auf dem iPhone) -->
+<div id="incoming" class="ios" hidden>
+  <div class="ios-bg"></div>
+  <div class="inc-head">
+    <div class="inc-name">Jarvis</div>
+    <div class="inc-app"><img src="icon-32.png" alt="" width="18" height="18"><span>Jarvis-Audio …</span></div>
+  </div>
   <div id="inc-text" class="inc-text"></div>
-  <div class="call-actions"><button id="inc-no" class="round off" type="button">Später</button><button id="inc-yes" class="round yes" type="button">Annehmen</button></div>
+  <div class="inc-mid"><svg viewBox="0 0 24 24" width="26" height="26"><path d="M12 6a7 7 0 107 7 7 7 0 00-7-7zm0 12a5 5 0 115-5 5 5 0 01-5 5zm.5-8H11v4l3.4 2 .8-1.2-2.7-1.6zM6.6 3.3L5.3 1.8 1.6 5l1.3 1.5zM22.4 5l-3.7-3.2-1.3 1.5L21.1 6.5z"/></svg><span>Erinnerung</span></div>
+  <div class="inc-btns">
+    <div><button id="inc-no" class="inc-b no" type="button" aria-label="Ablehnen"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg></button><span>Ablehnen</span></div>
+    <div><button id="inc-yes" class="inc-b yes" type="button" aria-label="Annehmen"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#fff" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button><span>Annehmen</span></div>
+  </div>
 </div>
 
 <script src="config.js"></script>

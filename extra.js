@@ -123,24 +123,31 @@
 
   // Anruf: frei sprechen. Hören -> Jarvis antwortet -> Vorlesen -> wieder hören
   const callEl = $('call'); const orb = $('call-orb'); const octx = orb.getContext('2d');
-  let callState = 'idle'; let muted = false; let raf = 0; let level = 0;
+  let callState = 'idle'; let muted = false; let held = false; let pcMode = false; let subs = true; let raf = 0; let level = 0; let callStart = 0; let clock = 0;
   const COLORS = { listen: [76, 201, 255], think: [255, 179, 64], speak: [210, 245, 255], idle: [80, 110, 130], muted: [120, 120, 130] };
+  const fmtT = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); };
+  function showSub() {
+    const k = held ? 'hold' : muted ? 'muted' : callState;
+    const lbl = { listen: '', think: 'denkt nach …', speak: 'spricht …', muted: 'stumm', idle: '', hold: 'gehalten' }[k] || '';
+    $('call-state').textContent = callStart ? [fmtT(Date.now() - callStart), lbl, pcMode ? 'PC' : '', camOn ? 'Kamera' : ''].filter(Boolean).join(' · ') : 'Verbinde …';
+  }
   function setCall(st, text) {
-    callState = st; $('call-state').textContent = { listen: 'Jarvis hört zu', think: 'Jarvis denkt nach', speak: 'Jarvis spricht', muted: 'Stumm', idle: 'Verbinde ...' }[st] || '';
+    callState = st;
     if (text != null) $('call-text').textContent = text;
+    showSub();
   }
   function drawOrb(t) {
     if (!callOn) return;
-    const W = orb.width, c = W / 2, col = COLORS[muted ? 'muted' : callState] || COLORS.idle;
+    const W = orb.width, c = W / 2, col = COLORS[muted || held ? 'muted' : callState] || COLORS.idle;
     level += ((callState === 'speak' ? 0.5 + 0.5 * Math.abs(Math.sin(t / 130) * Math.sin(t / 310)) : callState === 'think' ? 0.35 : 0.12) - level) * 0.08;
     octx.clearRect(0, 0, W, W);
-    for (let i = 0; i < 4; i++) {
-      const r = 120 + i * 48 + level * (14 + i * 6) * Math.sin(t / 400 + i);
+    for (let i = 0; i < 3; i++) {
+      const r = 78 + i * 22 + level * (8 + i * 4) * Math.sin(t / 400 + i);
       octx.beginPath(); octx.arc(c, c, r, 0, Math.PI * 2); octx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${0.55 - i * 0.11})`; octx.lineWidth = 3 - i * 0.5; octx.setLineDash(i % 2 ? [6, 14] : [90, 24]); octx.lineDashOffset = -t / (30 + i * 20) * (i % 2 ? -1 : 1); octx.stroke();
     }
     octx.setLineDash([]);
-    const g = octx.createRadialGradient(c, c, 4, c, c, 105 + level * 30); g.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},0.95)`); g.addColorStop(1, `rgba(${col[0]},${col[1]},${col[2]},0)`);
-    octx.fillStyle = g; octx.beginPath(); octx.arc(c, c, 105 + level * 30, 0, Math.PI * 2); octx.fill();
+    const g = octx.createRadialGradient(c, c, 4, c, c, 64 + level * 16); g.addColorStop(0, `rgba(${col[0]},${col[1]},${col[2]},0.95)`); g.addColorStop(1, `rgba(${col[0]},${col[1]},${col[2]},0)`);
+    octx.fillStyle = g; octx.beginPath(); octx.arc(c, c, 64 + level * 16, 0, Math.PI * 2); octx.fill();
     raf = requestAnimationFrame(drawOrb);
   }
   // jeder Anruf wird gespeichert: hier auf dem Handy (Einstellungen > Gespräche) und, über die Markierungen im Chat, auf dem PC
@@ -152,30 +159,106 @@
     if (callLog.lines.length) { let all = []; try { all = JSON.parse(localStorage.getItem('jc-calls') || '[]'); } catch { /* ignore */ } all.unshift(callLog); try { localStorage.setItem('jc-calls', JSON.stringify(all.slice(0, 30))); } catch { /* ignore */ } }
     const sec = Math.round((callLog.end - callLog.start) / 1000); mark(`beendet (${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}, ${callLog.lines.filter((x) => x.r === 'du').length} Sätze von dir)`); callLog = null;
   }
+  const PC_RE = /^(computer|pc|am pc|auf dem pc|beim pc)\b[,:]?\s*/i;
   async function callLoop() {
     while (callOn) {
-      if (muted) { setCall('muted'); await sleep(300); continue; }
+      if (muted || held) { setCall('listen'); await sleep(300); continue; }
       setCall('listen');
       const text = await listenOnce(14000);
-      if (!callOn) break; if (muted || !text) continue;
+      if (!callOn) break; if (muted || held || !text) continue;
       setCall('think', 'Du: ' + text);
       if (callLog) callLog.lines.push({ r: 'du', t: text, at: Date.now() });
-      await JC.send(text);                              // wartet, bis die Antwort da ist (PC, Cloud oder Handy-Wissen)
+      const pa = phoneAction(text, pcMode);
+      if (pa) {
+        runPhoneAction(text, pa); if (callLog) callLog.lines.push({ r: 'jarvis', t: pa.say, at: Date.now() });
+        setCall('speak', pa.say); await enqueueSpeak(pa.say);
+        if (pa.url) { endCall(); setTimeout(() => { location.href = pa.url; }, 200); return; }
+        continue;
+      }
+      if (pcMode || PC_RE.test(text)) {
+        if (!paired()) { const s = 'Den PC kann ich erst steuern, wenn das Handy gekoppelt ist. Das geht in den Einstellungen unter PC-Steuerung.'; setCall('speak', s); await enqueueSpeak(s); continue; }
+        await sendCtl(text.replace(PC_RE, '') || text);   // die Antwort kommt als PC-Nachricht und wird vorgelesen
+      } else {
+        if (camOn && !JC.pcOnline()) { const s = 'Die Kamera sieht nur Jarvis am PC, und der ist gerade aus.'; setCall('speak', s); await enqueueSpeak(s); }
+        await JC.send(text);                              // wartet, bis die Antwort da ist (PC, Cloud oder Handy-Wissen)
+      }
       setCall('speak'); const said = lastJarvis(); if (callLog && said) callLog.lines.push({ r: 'jarvis', t: said, at: Date.now() });
       $('call-text').textContent = said; await speakChain.catch(() => {}); // Antwort wird vorgelesen
       await sleep(250);
     }
   }
+  function stopListen() { try { listenOnce.cur && listenOnce.cur.stop(); } catch { /* ignore */ } }
   function startCall(brief) {
     if (callOn) return;
     if (!SR) { alert('Dieser Browser kann keine Sprache erkennen. Auf dem iPhone geht es in Safari. Aus der App auf dem Home-Bildschirm geht es manchmal nicht, dann nimm die Diktier-Taste der Tastatur.'); return; }
-    unlockAudio(); callOn = true; muted = false; callEl.hidden = false; setCall('idle', ''); raf = requestAnimationFrame(drawOrb);
+    unlockAudio(); callOn = true; muted = false; held = false; pcMode = false;
+    ['call-mute', 'call-hold', 'call-pc'].forEach((id) => $(id).classList.remove('on'));
+    callEl.hidden = false; callStart = Date.now(); clearInterval(clock); clock = setInterval(showSub, 1000); setCall('idle', ''); raf = requestAnimationFrame(drawOrb);
     $('sheet').hidden = true; callLog = { start: Date.now(), lines: [] }; mark('gestartet');
-    if (brief) { callLog.lines.push({ r: 'jarvis', t: brief, at: Date.now() }); $('call-text').textContent = brief; enqueueSpeak(brief).then(() => { if (callOn) enqueueSpeak('Was soll ich als Nächstes tun?'); }); }
-    else enqueueSpeak('Ich höre.');
+    if (brief) { callLog.lines.push({ r: 'jarvis', t: brief, at: Date.now() }); $('call-text').textContent = brief; enqueueSpeak(brief).then(() => { if (callOn) enqueueSpeak('Was kann ich für dich tun?'); }); }
+    else enqueueSpeak('Ich höre, Master.');
     callLoop();
   }
-  function endCall() { callOn = false; cancelAnimationFrame(raf); callEl.hidden = true; try { listenOnce.cur && listenOnce.cur.stop(); } catch { /* ignore */ } stopSpeaking(); saveCall(); renderCalls(); }
+  function endCall() {
+    callOn = false; cancelAnimationFrame(raf); clearInterval(clock); callStart = 0; callEl.hidden = true;
+    if (camOn) camStop(); pcMode = false; stopListen(); stopSpeaking(); saveCall(); renderCalls();
+  }
+
+  // ---------- Kamera im Anruf: alle 2,5 s ein kleines Bild für Jarvis am PC ----------
+  let camOn = false; let camStream = null; let camTimer = 0; let camFacing = 'environment';
+  async function camStart() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $('call-text').textContent = 'Dieser Browser kann die Kamera nicht öffnen.'; return; }
+    try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: camFacing, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false }); }
+    catch (e) { $('call-text').textContent = 'Kamera nicht erlaubt. In den Einstellungen des Handys bei Safari die Kamera erlauben.'; return; }
+    const v = $('cam-view'); v.srcObject = camStream; v.hidden = false; v.play().catch(() => {});
+    camOn = true; $('call-cam').classList.add('on'); showSub();
+    if (!JC.pcOnline()) $('call-text').textContent = 'Kamera an. Sehen kann Jarvis nur, wenn dein PC an ist.';
+    else enqueueSpeak('Ich sehe jetzt, was deine Kamera zeigt. Frag mich einfach.');
+    const cv = document.createElement('canvas');
+    const snap = async () => {
+      if (!camOn) return;
+      if (v.videoWidth) {
+        const w = 512; const h = Math.round(512 * v.videoHeight / v.videoWidth); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(v, 0, 0, w, h);
+        try { await JC.rpc('jc_cam_put', { p_code: JC.code, p_img: cv.toDataURL('image/jpeg', 0.62).split(',')[1] }); } catch { /* nächster Versuch */ }
+      }
+      camTimer = setTimeout(snap, 2500);
+    };
+    snap();
+  }
+  function camStop() {
+    camOn = false; clearTimeout(camTimer);
+    try { if (camStream) camStream.getTracks().forEach((t) => t.stop()); } catch { /* ignore */ }
+    camStream = null; const v = $('cam-view'); v.hidden = true; v.srcObject = null; $('call-cam').classList.remove('on');
+    JC.rpc('jc_cam_put', { p_code: JC.code, p_img: '' }).catch(() => {}); showSub();
+  }
+
+  // ---------- Handy-Aktionen: Apps öffnen, Navigation, anrufen, SMS, WhatsApp ----------
+  const APPS = { youtube: 'youtube://', whatsapp: 'whatsapp://', spotify: 'spotify:', instagram: 'instagram://', tiktok: 'https://www.tiktok.com/', netflix: 'nflx://', karten: 'maps://', maps: 'maps://', 'google maps': 'comgooglemaps://', snapchat: 'snapchat://', telegram: 'tg://', facebook: 'fb://', twitch: 'twitch://', discord: 'discord://', 'app store': 'itms-apps://', musik: 'music://', 'apple music': 'music://', kalender: 'calshow://', fotos: 'photos-redirect://', mail: 'message://', google: 'https://www.google.com/', amazon: 'https://www.amazon.de/', ebay: 'https://www.ebay.de/', roblox: 'roblox://' };
+  const cap = (s) => s.replace(/\b\w/g, (c) => c.toUpperCase());
+  function phoneAction(raw, preferPc) {
+    const t = String(raw).toLowerCase().replace(/[.!?]+$/, '').replace(/\s+/g, ' ').trim();
+    if (/\b(pc|computer|rechner|laptop)\b/.test(t)) return null;      // PC-Befehle gehen an den PC
+    if (preferPc && !/\bhandy\b/.test(t)) return null;                  // im Modus PC steuern nur, wenn "Handy" gesagt wird
+    const tt = t.replace(/\s+(auf|am|an)\s+(dem|meinem)\s+handy$/, '').replace(/^(hey |ok )?jarvis,?\s*/, '');
+    let m = tt.match(/^(?:bitte\s+)?(?:öffne|oeffne|starte|mach|geh auf|geh zu|zeig mir)\s+(?:mir\s+)?(?:die\s+|das\s+)?(?:app\s+)?(.{3,20}?)(?:\s+app)?(?:\s+auf)?$/);
+    if (m && APPS[m[1].trim()]) return { say: 'Ich öffne ' + cap(m[1].trim()) + ', Master.', url: APPS[m[1].trim()] };
+    m = tt.match(/^(?:bitte\s+)?navigier\w*\s+(?:mich\s+)?(?:nach|zu|zum|zur|in die)\s+(.{2,80})$/);
+    if (m) return { say: 'Ich starte die Navigation nach ' + m[1] + '.', url: 'maps://?daddr=' + encodeURIComponent(m[1]) };
+    m = tt.match(/^(?:bitte\s+)?ruf\w*\s+(?:die\s+nummer\s+)?(\+?[\d ]{6,20})\s+an$/);
+    if (m) return { say: 'Ich rufe ' + m[1].trim() + ' an.', url: 'tel:' + m[1].replace(/\s/g, '') };
+    m = tt.match(/^(?:bitte\s+)?(?:schreib\w*|schick\w*)\s+(?:eine\s+)?(?:sms|nachricht)\s+an\s+(\+?[\d ]{6,20})[:,]?\s+(.{1,300})$/);
+    if (m) return { say: 'Ich öffne die Nachricht, du musst nur noch auf Senden tippen.', url: 'sms:' + m[1].replace(/\s/g, '') + '&body=' + encodeURIComponent(m[2]) };
+    m = tt.match(/^(?:bitte\s+)?(?:schreib\w*|schick\w*)\s+(?:eine\s+)?whatsapp(?:\s+nachricht)?[:,]?\s+(.{1,300})$/);
+    if (m) return { say: 'Ich öffne WhatsApp mit dem Text. Den Empfänger wählst du aus.', url: 'whatsapp://send?text=' + encodeURIComponent(m[1]) };
+    m = tt.match(/^(?:bitte\s+)?(?:such\w*|google\w*)\s+(?:mal\s+)?(?:nach\s+)?(.{2,120}?)(?:\s+(?:im internet|bei google))?$/);
+    if (m && /handy/.test(t)) return { say: 'Ich suche nach ' + m[1] + '.', url: 'https://www.google.com/search?q=' + encodeURIComponent(m[1]) };
+    if (/\b(wecker|timer|taschenlampe|wlan|bluetooth|helligkeit|flugmodus)\b/.test(tt) && /\bhandy\b/.test(t)) return { say: 'Das darf eine Web-App auf dem Handy nicht einstellen, Master. Sag es Siri, oder ich mache es am PC.' };
+    return null;
+  }
+  function runPhoneAction(text, pa) {
+    JC.addMsg({ role: 'user', via: 'phone', body: text }); JC.addMsg({ role: 'jarvis', via: '', body: pa.say });
+    if (pa.url && !callOn) setTimeout(() => { location.href = pa.url; }, 500);
+  }
   // Gespräche und Gedächtnis in den Einstellungen
   function renderCalls() {
     const box = $('calls-list'); if (!box) return; let all = []; try { all = JSON.parse(localStorage.getItem('jc-calls') || '[]'); } catch { /* ignore */ }
@@ -198,16 +281,46 @@
   renderCalls();
 
   // Eingehender Anruf (aus der Benachrichtigung): Annehmen -> Jarvis sagt, was los ist, danach kann man reden
-  async function incoming() {
-    await sleep(1800); await JC.refreshState().catch(() => {});
-    const alerts = [...document.querySelectorAll('.msg.alert')].slice(-3).map((e) => e.firstChild.textContent.replace(/^Meldung\s*/, ''));
-    const brief = alerts.length ? 'Master, es gibt Neuigkeiten. ' + alerts.join(' ') : 'Master, ich wollte nur kurz melden, dass alles in Ordnung ist.';
-    $('inc-text').textContent = alerts.length ? alerts.join('\n\n') : 'Nichts Dringendes.'; $('incoming').hidden = false;
-    $('inc-yes').onclick = () => { $('incoming').hidden = true; history.replaceState(null, '', location.pathname); startCall(brief); };
-    $('inc-no').onclick = () => { $('incoming').hidden = true; history.replaceState(null, '', location.pathname); };
+  // Klingelton (selbst erzeugt) + Vibration, bis angenommen, abgelehnt oder 45 s vorbei
+  let ringCtx = null; let ringTimer = 0;
+  function ringStart() {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext; ringCtx = new AC();
+      const beep = () => {
+        if (!ringCtx) return; const t0 = ringCtx.currentTime;
+        [[0, 1046], [0.16, 1318], [0.32, 1568], [0.48, 1318], [0.8, 1046], [0.96, 1318], [1.12, 1568]].forEach(([d, f]) => {
+          const o = ringCtx.createOscillator(); const g = ringCtx.createGain(); o.type = 'sine'; o.frequency.value = f;
+          g.gain.setValueAtTime(0, t0 + d); g.gain.linearRampToValueAtTime(0.22, t0 + d + 0.015); g.gain.exponentialRampToValueAtTime(0.001, t0 + d + 0.15);
+          o.connect(g); g.connect(ringCtx.destination); o.start(t0 + d); o.stop(t0 + d + 0.17);
+        });
+      };
+      if (ringCtx.state === 'suspended') ringCtx.resume().catch(() => {});
+      beep(); ringTimer = setInterval(beep, 2400);
+    } catch { /* ohne Ton */ }
+    try { if (navigator.vibrate) navigator.vibrate([700, 500, 700, 500, 700, 500, 700]); } catch { /* ignore */ }
   }
-  if (/[?&]call=1\b/.test(location.search)) incoming();
+  function ringStop() { clearInterval(ringTimer); try { if (ringCtx) ringCtx.close(); } catch { /* ignore */ } ringCtx = null; try { if (navigator.vibrate) navigator.vibrate(0); } catch { /* ignore */ } }
+  async function incoming(text) {
+    if (callOn || !$('incoming').hidden) return;
+    await JC.refreshState().catch(() => {});
+    const alerts = [...document.querySelectorAll('.msg.alert')].slice(-3).map((e) => e.firstChild.textContent.replace(/^Meldung\s*/, ''));
+    const brief = text || (alerts.length ? 'Master, es gibt Neuigkeiten. ' + alerts.join(' ') : 'Hallo Master, hier ist Jarvis.');
+    $('inc-text').textContent = text || (alerts.length ? alerts.join('\n\n') : '');
+    $('incoming').hidden = false; ringStart();
+    const close = () => { clearTimeout(auto); ringStop(); $('incoming').hidden = true; history.replaceState(null, '', location.pathname); };
+    const auto = setTimeout(() => { if (!$('incoming').hidden) close(); }, 45000);
+    $('inc-yes').onclick = () => { close(); startCall(brief); };
+    $('inc-no').onclick = () => { close(); };
+  }
+  if (/[?&]call=1\b/.test(location.search)) setTimeout(() => incoming(), 1200);
   if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.call && !callOn) incoming(); });
+  // Jarvis am PC klingelt ("Ruf mich auf dem Handy an"): sichtbar, sobald die Seite offen ist
+  JC.hooks.render.push(() => {
+    const r = JC.state.ring_at; if (!r || localStorage.getItem('jc-ring-seen') === r) return;
+    localStorage.setItem('jc-ring-seen', r);
+    const age = Date.parse(JC.state.now || new Date().toISOString()) - Date.parse(r);
+    if (age < 90000 && !callOn) incoming(JC.state.ring_text || '');
+  });
 
   // Hintergrund: ruhig treibende Lichtpunkte mit feinen Linien (stoppt bei "weniger Bewegung" und im Hintergrund)
   (function bg() {
@@ -226,7 +339,17 @@
   })();
   $('call-btn').addEventListener('click', () => startCall());
   $('call-end').addEventListener('click', endCall);
-  $('call-mute').addEventListener('click', () => { muted = !muted; $('call-mute').classList.toggle('off', muted); if (muted) { try { listenOnce.cur && listenOnce.cur.stop(); } catch { /* ignore */ } } });
+  $('call-mute').addEventListener('click', () => { muted = !muted; $('call-mute').classList.toggle('on', muted); if (muted) stopListen(); showSub(); });
+  $('call-hold').addEventListener('click', () => { held = !held; $('call-hold').classList.toggle('on', held); if (held) { stopListen(); stopSpeaking(); } showSub(); });
+  $('call-cam').addEventListener('click', () => { if (camOn) camStop(); else camStart(); });
+  $('call-flip').addEventListener('click', async () => { camFacing = camFacing === 'environment' ? 'user' : 'environment'; if (camOn) { camStop(); await camStart(); } });
+  $('call-pc').addEventListener('click', () => {
+    if (!paired()) { $('call-text').textContent = 'PC steuern geht erst nach der Kopplung: Einstellungen, PC-Steuerung.'; return; }
+    pcMode = !pcMode; $('call-pc').classList.toggle('on', pcMode);
+    const s = pcMode ? 'PC-Steuerung an. Was du jetzt sagst, mache ich am PC.' : 'PC-Steuerung aus. Wir reden wieder normal.';
+    $('call-text').textContent = s; enqueueSpeak(s); showSub();
+  });
+  $('call-sub').addEventListener('click', () => { subs = !subs; $('call-sub').classList.toggle('on', subs); $('call-text').classList.toggle('off', !subs); });
 
   // =====================================================================
   // Benachrichtigungen (Push)
@@ -277,18 +400,22 @@
   }
   $('mode-chat').addEventListener('click', () => setMode('chat'));
   $('mode-ctl').addEventListener('click', () => setMode('ctl'));
+  async function sendCtl(text) {
+    const tell = (s) => { JC.addMsg({ role: 'jarvis', via: '', body: s }); if (callOn) return enqueueSpeak(s); return null; };
+    if (!JC.pcOnline()) { await tell('Dein PC ist gerade aus. Befehle gehen nur, wenn er an ist.'); return; }
+    let mid;
+    try { mid = Number(await JC.rpc('jc_ctl_send', { p_code: JC.code, p_token: ctl.token, p_body: text.slice(0, 300) })); }
+    catch (e) { await tell('Der Befehl wurde nicht angenommen: ' + e.message); return; }
+    JC.addMsg({ id: mid, role: 'user', via: 'phone', kind: 'ctl', body: text });
+    JC.typing(true);
+    const done = new Promise((res) => { JC.waitFor(mid, res); });
+    await Promise.race([done, sleep(125000)]); JC.typing(false);
+  }
   JC.interceptSend = (text) => {
+    const pa = phoneAction(text, mode === 'ctl');
+    if (pa) { runPhoneAction(text, pa); return true; }
     if (mode !== 'ctl' || !paired()) return false;
-    (async () => {
-      if (!JC.pcOnline()) { JC.addMsg({ role: 'jarvis', via: '', body: 'Dein PC ist gerade aus. Befehle gehen nur, wenn er an ist.' }); return; }
-      let mid;
-      try { mid = Number(await JC.rpc('jc_ctl_send', { p_code: JC.code, p_token: ctl.token, p_body: text })); }
-      catch (e) { JC.addMsg({ role: 'jarvis', via: '', body: 'Der Befehl wurde nicht angenommen: ' + e.message }); return; }
-      JC.addMsg({ id: mid, role: 'user', via: 'phone', kind: 'ctl', body: text });
-      JC.typing(true);
-      const done = new Promise((res) => { JC.waitFor(mid, res); });
-      await Promise.race([done, sleep(125000)]); JC.typing(false);
-    })();
+    sendCtl(text);
     return true;
   };
   $('ctl-pair-btn').addEventListener('click', async () => {
