@@ -210,3 +210,4 @@ header::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;ba
 .inc-b.yes{background:#2f80ff;animation:none}
 #incoming:not([hidden]) .inc-b.yes{animation:incPulse 1.6s ease-in-out infinite}
 @keyframes incPulse{0%,100%{box-shadow:0 0 0 0 rgba(47,128,255,.5)}50%{box-shadow:0 0 0 14px rgba(47,128,255,0)}}
+#incoming #inc-no,#incoming #inc-yes{width:78px;min-width:0;height:78px;border-radius:50%;padding:0;border:0}
